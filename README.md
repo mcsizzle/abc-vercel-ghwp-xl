@@ -3,7 +3,7 @@ This agent helps you get a daily walk in at end of day, telling you the latest y
 
 ## Deployment
 Project is live at:
-**[https://goldenhourwalker.vercel.app](https://goldenhourwalker.vercel.app/)]**
+**[https://goldenhourwalker.vercel.app](https://goldenhourwalker.vercel.app/)**
 
 ## User flow
 1. Specify a city name, e.g. Ottawa
