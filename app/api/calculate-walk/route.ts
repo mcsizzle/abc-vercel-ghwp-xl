@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { find } from "geo-tz"
+import moment from "moment-timezone"
+import { DateTime } from "luxon"
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,18 +13,28 @@ export async function POST(request: NextRequest) {
 
     let timezone = "UTC"
     try {
-      const timezones = find(lat, lon)
-      if (timezones && timezones.length > 0) {
-        timezone = timezones[0]
+      const timezoneUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&timezone=auto`
+      const timezoneResponse = await fetch(timezoneUrl)
+
+      if (timezoneResponse.ok) {
+        const timezoneData = await timezoneResponse.json()
+        if (timezoneData.timezone) {
+          timezone = timezoneData.timezone
+        }
       }
     } catch (error) {
       console.error("Error looking up timezone, using UTC:", error)
     }
 
+    let actualDate = date
+    if (date === "today") {
+      actualDate = moment.tz(timezone).format("YYYY-MM-DD")
+    }
+
     // Fetch sunset data
     let sunsetData
     try {
-      const sunsetUrl = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&date=${date}&formatted=0`
+      const sunsetUrl = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lon}&date=${actualDate}&formatted=0`
       const sunsetResponse = await fetch(sunsetUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0",
@@ -49,6 +60,7 @@ export async function POST(request: NextRequest) {
 
     // Calculate walk duration in milliseconds
     const walkDurationMs = (hours * 60 + minutes) * 60 * 1000
+    const walkDurationMinutes = hours * 60 + minutes
 
     // Calculate start time (sunset time minus walk duration)
     const startTime = new Date(sunsetUTC.getTime() - walkDurationMs)
@@ -56,6 +68,33 @@ export async function POST(request: NextRequest) {
     // Calculate time until walk
     const now = new Date()
     const timeUntilWalkMs = startTime.getTime() - now.getTime()
+
+    let minutesWalkingInDark = 0
+    let shouldHaveLeftBy: string | undefined = undefined
+
+    if (timeUntilWalkMs < 0 && walkDurationMinutes > 0) {
+      // Walk should have already started
+      // Calculate when they should have left to finish at sunset
+      shouldHaveLeftBy = startTime.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: timezone,
+      })
+
+      // Calculate how many minutes they'll be walking in the dark if they start now
+      const timeUntilSunsetMs = sunsetUTC.getTime() - now.getTime()
+      if (timeUntilSunsetMs > 0) {
+        // Sunset hasn't happened yet
+        const minutesUntilSunset = Math.floor(timeUntilSunsetMs / (1000 * 60))
+        if (walkDurationMinutes > minutesUntilSunset) {
+          minutesWalkingInDark = walkDurationMinutes - minutesUntilSunset
+        }
+      } else {
+        // Sunset has already passed
+        minutesWalkingInDark = walkDurationMinutes
+      }
+    }
 
     let timeUntilWalkStr = ""
     if (timeUntilWalkMs < 0) {
@@ -74,13 +113,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const timezoneAbbr =
-      new Intl.DateTimeFormat("en-US", {
-        timeZone: timezone,
-        timeZoneName: "short",
-      })
-        .formatToParts(sunsetUTC)
-        .find((part) => part.type === "timeZoneName")?.value || timezone
+    const timezoneAbbr = moment.tz(timezone).zoneAbbr()
+
+    console.log("[v0] Timezone from Open-Meteo:", timezone)
+    console.log("[v0] Moment-timezone abbreviation:", timezoneAbbr)
+    console.log("[v0] DateTime object:", DateTime.now().setZone(timezone).toString())
 
     const result = {
       sunsetTime: sunsetUTC.toLocaleTimeString("en-US", {
@@ -97,8 +134,11 @@ export async function POST(request: NextRequest) {
       }),
       timeUntilWalk: timeUntilWalkStr,
       city,
-      date,
-      timezone: timezoneAbbr, // Return abbreviation instead of full timezone name
+      date: actualDate, // Return the actual date used (not "today")
+      timezone: timezoneAbbr,
+      walkDurationMinutes,
+      minutesWalkingInDark: minutesWalkingInDark > 0 ? minutesWalkingInDark : undefined,
+      shouldHaveLeftBy,
     }
 
     return NextResponse.json(result)

@@ -16,9 +16,15 @@ export function getSpeedUnit(country: string): "mph" | "kmh" {
 }
 
 export function formatTemperature(temp: number, unit: "celsius" | "fahrenheit"): string {
-  return `${Math.round(temp)}°${unit === "celsius" ? "C" : "F"}`
+  const celsius = unit === "celsius" ? temp : ((temp - 32) * 5) / 9
+  const fahrenheit = unit === "fahrenheit" ? temp : (temp * 9) / 5 + 32
+
+  return `${Math.round(fahrenheit)}°F / ${Math.round(celsius)}°C`
 }
 
 export function formatSpeed(speed: number, unit: "mph" | "kmh"): string {
-  return `${Math.round(speed)} ${unit === "mph" ? "mph" : "km/h"}`
+  const mph = unit === "mph" ? speed : speed * 0.621371
+  const kmh = unit === "kmh" ? speed : speed * 1.60934
+
+  return `${Math.round(mph)} mph / ${Math.round(kmh)} km/h`
 }
