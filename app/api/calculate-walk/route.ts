@@ -58,6 +58,11 @@ export async function POST(request: NextRequest) {
     // Parse sunset time (in UTC)
     const sunsetUTC = new Date(sunsetData.results.sunset)
 
+    const civilTwilightEndUTC = new Date(sunsetData.results.civil_twilight_end)
+
+    // Calculate minutes between sunset and civil twilight end
+    const minutesUntilDark = Math.round((civilTwilightEndUTC.getTime() - sunsetUTC.getTime()) / (1000 * 60))
+
     // Calculate walk duration in milliseconds
     const walkDurationMs = (hours * 60 + minutes) * 60 * 1000
     const walkDurationMinutes = hours * 60 + minutes
@@ -135,10 +140,18 @@ export async function POST(request: NextRequest) {
       timeUntilWalk: timeUntilWalkStr,
       city,
       date: actualDate, // Return the actual date used (not "today")
-      timezone: timezoneAbbr,
+      timezone: timezone, // IANA timezone name (e.g., "Asia/Seoul")
+      timezoneAbbr: timezoneAbbr, // Timezone abbreviation (e.g., "KST")
       walkDurationMinutes,
       minutesWalkingInDark: minutesWalkingInDark > 0 ? minutesWalkingInDark : undefined,
       shouldHaveLeftBy,
+      civilTwilightEnd: civilTwilightEndUTC.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+        timeZone: timezone,
+      }),
+      minutesUntilDark,
     }
 
     return NextResponse.json(result)

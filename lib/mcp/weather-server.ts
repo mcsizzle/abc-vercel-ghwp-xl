@@ -46,12 +46,22 @@ export async function getCurrentConditions(params: z.infer<typeof getCurrentCond
     // Fetch current weather from Open-Meteo API
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,precipitation,wind_speed_10m,weather_code,relative_humidity_2m,apparent_temperature&temperature_unit=${tempUnit}&wind_speed_unit=${speedUnit}&timezone=auto`
 
+    console.log("[v0] Fetching current weather from URL:", url)
+
     const response = await fetch(url)
+
+    console.log("[v0] Response status:", response.status)
+    console.log("[v0] Response ok:", response.ok)
+
     if (!response.ok) {
-      throw new Error("Failed to fetch current weather")
+      const errorText = await response.text()
+      console.log("[v0] Error response body:", errorText)
+      throw new Error(`Failed to fetch current weather: ${response.status} ${errorText}`)
     }
 
     const data = await response.json()
+    console.log("[v0] Current weather data received:", JSON.stringify(data, null, 2))
+
     const current = data.current
 
     return {
@@ -65,7 +75,8 @@ export async function getCurrentConditions(params: z.infer<typeof getCurrentCond
       timestamp: current.time,
     }
   } catch (error) {
-    console.error("Error fetching current conditions:", error)
+    console.error("[v0] Error fetching current conditions:", error)
+    console.error("[v0] Error details:", error instanceof Error ? error.message : String(error))
     throw error
   }
 }
@@ -120,7 +131,7 @@ export async function compareForecastToActual(params: z.infer<typeof compareFore
   return {
     comparison,
     hasSignificantChanges,
-    summary: generateComparisonSummary(comparison),
+    summary: generateComparisonSummary(comparison, tempUnit),
   }
 }
 
@@ -234,34 +245,29 @@ function calculateWindChill(temp: number, windSpeed: number, unit = "fahrenheit"
   }
 }
 
-function generateComparisonSummary(comparison: any): string {
+function generateComparisonSummary(comparison: any, tempUnit = "fahrenheit"): string {
   const parts = []
 
   if (comparison.temperature.significant) {
     const direction = comparison.temperature.difference > 0 ? "warmer" : "cooler"
-    parts.push(
-      `Temperature is ${Math.abs(comparison.temperature.difference)}° ${direction} than predicted (${comparison.temperature.actual}° vs ${comparison.temperature.forecast}°)`,
-    )
+    parts.push(`Temperature is ${direction} than predicted`)
   } else {
-    parts.push(`Temperature is close to forecast (${comparison.temperature.actual}°)`)
+    parts.push(`Temperature is close to forecast`)
   }
 
   if (comparison.windSpeed.significant) {
     const direction = comparison.windSpeed.difference > 0 ? "windier" : "calmer"
-    parts.push(
-      `Wind is ${Math.abs(comparison.windSpeed.difference)} ${direction} than expected (${comparison.windSpeed.actual} vs ${comparison.windSpeed.forecast})`,
-    )
+    parts.push(`Wind is ${direction} than expected`)
   }
 
   if (comparison.precipitation.significant) {
-    parts.push(
-      `Precipitation probability changed significantly (${comparison.precipitation.actual}% vs ${comparison.precipitation.forecast}%)`,
-    )
+    const direction = comparison.precipitation.difference > 0 ? "higher" : "lower"
+    parts.push(`Precipitation probability is ${direction} than forecast`)
   }
 
   if (comparison.condition.changed) {
     parts.push(`Conditions changed from ${comparison.condition.forecast} to ${comparison.condition.actual}`)
   }
 
-  return parts.join(". ")
+  return parts.join(". ") + "."
 }

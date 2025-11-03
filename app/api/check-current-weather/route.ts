@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     const granularFactors = await getGranularWeatherFactors({ lat, lon, tempUnit })
 
-    const currentWeatherOutfit = generateOutfitForCurrentConditions(currentConditions)
+    const currentWeatherOutfit = generateOutfitForCurrentConditions(currentConditions, tempUnit, speedUnit)
 
     // Generate friendly response message
     const message = generateResponseMessage(comparison, granularFactors, currentConditions, tempUnit)
@@ -72,23 +72,40 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function generateOutfitForCurrentConditions(currentConditions: any): OutfitRecommendations {
+function generateOutfitForCurrentConditions(
+  currentConditions: any,
+  tempUnit: string,
+  speedUnit: string,
+): OutfitRecommendations {
   const { temperature, condition, precipitation, windSpeed } = currentConditions
   const outerwear: string[] = []
   const shoes: string[] = []
   const accessories: string[] = []
 
+  const isCelsius = tempUnit === "celsius"
+  const isKmh = speedUnit === "kmh"
+
+  // Temperature thresholds based on unit
+  const HOT_TEMP = isCelsius ? 24 : 75 // 75°F = 24°C
+  const WARM_TEMP = isCelsius ? 15 : 60 // 60°F = 15°C
+  const COOL_TEMP = isCelsius ? 7 : 45 // 45°F = 7°C
+  const COLD_TEMP = isCelsius ? 0 : 32 // 32°F = 0°C
+  const VERY_COLD_TEMP = isCelsius ? 4 : 40 // 40°F = 4°C
+
+  // Wind speed thresholds based on unit
+  const WINDY_THRESHOLD = isKmh ? 24 : 15 // 15 mph = 24 km/h
+
   // Temperature-based outerwear recommendations
-  if (temperature >= 75) {
+  if (temperature >= HOT_TEMP) {
     outerwear.push("Light breathable shirt")
     outerwear.push("Tank top or t-shirt")
-  } else if (temperature >= 60) {
+  } else if (temperature >= WARM_TEMP) {
     outerwear.push("Light jacket")
     outerwear.push("Long sleeve shirt")
-  } else if (temperature >= 45) {
+  } else if (temperature >= COOL_TEMP) {
     outerwear.push("Medium jacket")
     outerwear.push("Sweater or hoodie")
-  } else if (temperature >= 32) {
+  } else if (temperature >= COLD_TEMP) {
     outerwear.push("Heavy coat")
     outerwear.push("Insulated jacket")
   } else {
@@ -115,15 +132,15 @@ function generateOutfitForCurrentConditions(currentConditions: any): OutfitRecom
   }
 
   // Wind-based recommendations
-  if (windSpeed > 15) {
+  if (windSpeed > WINDY_THRESHOLD) {
     outerwear.push("Windbreaker")
-    if (temperature < 50) {
+    if (temperature < (isCelsius ? 10 : 50)) {
       accessories.push("Ear warmers or hat")
     }
   }
 
-  // Temperature-based accessories (Rule 4: below 40°F always suggest winter accessories)
-  if (temperature < 40) {
+  // Temperature-based accessories (Rule 4: below 40°F/4°C always suggest winter accessories)
+  if (temperature < VERY_COLD_TEMP) {
     if (!accessories.includes("Winter hat") && !accessories.includes("Beanie or winter hat")) {
       accessories.push("Winter hat")
     }
@@ -137,10 +154,10 @@ function generateOutfitForCurrentConditions(currentConditions: any): OutfitRecom
 
   // Default shoe recommendations if not set
   if (shoes.length === 0) {
-    if (temperature > 75) {
+    if (temperature > HOT_TEMP) {
       shoes.push("Comfortable walking shoes")
       shoes.push("Breathable sneakers")
-    } else if (temperature > 50) {
+    } else if (temperature > (isCelsius ? 10 : 50)) {
       shoes.push("Walking shoes")
       shoes.push("Athletic sneakers")
     } else {
@@ -173,7 +190,7 @@ function generateResponseMessage(
 
   // Rule 6: Only mention wind chill for very cold weather (below 40°F / 4°C) and when significant
   const tempDifference = Math.abs(granularFactors.feelsLike - currentConditions.temperature)
-  if (currentTempF < COLD_TEMP_F && tempDifference >= 3) {
+  if (currentTempF < HOT_TEMP_F && tempDifference >= 3) {
     const comparison = granularFactors.feelsLike < currentConditions.temperature ? "colder" : "warmer"
     parts.push(
       `Feels like ${granularFactors.feelsLike}°${tempUnit === "celsius" ? "C" : "F"} (${comparison} than actual temperature).`,

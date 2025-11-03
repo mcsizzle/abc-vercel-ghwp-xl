@@ -71,8 +71,7 @@ export async function POST(request: NextRequest) {
       windSpeed,
     }
 
-    // Generate outfit recommendations based on weather
-    const recommendations = generateOutfitRecommendations(weather)
+    const recommendations = generateOutfitRecommendations(weather, tempUnitParam, speedUnitParam)
 
     return NextResponse.json({
       weather,
@@ -100,23 +99,39 @@ function getWeatherCondition(code: number): string {
   return "Partly cloudy"
 }
 
-function generateOutfitRecommendations(weather: WeatherData): OutfitRecommendations {
+function generateOutfitRecommendations(
+  weather: WeatherData,
+  tempUnit = "fahrenheit",
+  speedUnit = "mph",
+): OutfitRecommendations {
   const { temperature, condition, precipitation, windSpeed } = weather
   const outerwear: string[] = []
   const shoes: string[] = []
   const accessories: string[] = []
 
+  const isCelsius = tempUnit === "celsius"
+  const isKmh = speedUnit === "kmh"
+
+  // Temperature thresholds (Fahrenheit / Celsius)
+  const VERY_HOT = isCelsius ? 24 : 75 // 75°F = 24°C
+  const WARM = isCelsius ? 15 : 60 // 60°F = 15°C
+  const COOL = isCelsius ? 7 : 45 // 45°F = 7°C
+  const COLD = isCelsius ? 0 : 32 // 32°F = 0°C
+
+  // Wind speed threshold (mph / km/h)
+  const WINDY = isKmh ? 24 : 15 // 15 mph = 24 km/h
+
   // Temperature-based outerwear recommendations
-  if (temperature >= 75) {
+  if (temperature >= VERY_HOT) {
     outerwear.push("Light breathable shirt")
     outerwear.push("Tank top or t-shirt")
-  } else if (temperature >= 60) {
+  } else if (temperature >= WARM) {
     outerwear.push("Light jacket")
     outerwear.push("Long sleeve shirt")
-  } else if (temperature >= 45) {
+  } else if (temperature >= COOL) {
     outerwear.push("Medium jacket")
     outerwear.push("Sweater or hoodie")
-  } else if (temperature >= 32) {
+  } else if (temperature >= COLD) {
     outerwear.push("Heavy coat")
     outerwear.push("Insulated jacket")
   } else {
@@ -143,22 +158,25 @@ function generateOutfitRecommendations(weather: WeatherData): OutfitRecommendati
   }
 
   // Wind-based recommendations
-  if (windSpeed > 15) {
+  if (windSpeed > WINDY) {
     outerwear.push("Windbreaker")
-    if (temperature < 50) {
+    const COOL_TEMP = isCelsius ? 10 : 50 // 50°F = 10°C
+    if (temperature < COOL_TEMP) {
       accessories.push("Ear warmers or hat")
     }
   }
 
   // Temperature-based accessories
-  if (temperature < 40 && !accessories.includes("Winter hat")) {
+  const CHILLY = isCelsius ? 4 : 40 // 40°F = 4°C
+  if (temperature < CHILLY && !accessories.includes("Winter hat")) {
     accessories.push("Beanie or winter hat")
     if (!accessories.includes("Gloves")) {
       accessories.push("Gloves")
     }
   }
 
-  if (temperature > 70 && condition.toLowerCase().includes("clear")) {
+  const HOT = isCelsius ? 21 : 70 // 70°F = 21°C
+  if (temperature > HOT && condition.toLowerCase().includes("clear")) {
     accessories.push("Sunglasses")
     accessories.push("Sun hat")
     accessories.push("Sunscreen")
@@ -166,10 +184,10 @@ function generateOutfitRecommendations(weather: WeatherData): OutfitRecommendati
 
   // Default shoe recommendations if not set
   if (shoes.length === 0) {
-    if (temperature > 75) {
+    if (temperature > VERY_HOT) {
       shoes.push("Comfortable walking shoes")
       shoes.push("Breathable sneakers")
-    } else if (temperature > 50) {
+    } else if (temperature > COOL) {
       shoes.push("Walking shoes")
       shoes.push("Athletic sneakers")
     } else {
